@@ -1,0 +1,6 @@
+; $Id$
+name = Great Dane
+description = Adding several developer-only Features to make Drupal-Theming suck less
+core = 7.x
+;dependencies = 
+;package = 

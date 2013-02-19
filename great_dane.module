@@ -1,0 +1,566 @@
+<?php
+
+/** Author: Benjamin Birkenhake <benjamin@birkenhake.org> 
+
+	This Module tries to make Drupal Theming suck less by doing three kinds of things:
+ 
+	1. 	Deliver additional Data to the rendering engine and the templates, 
+    	which allows Themers to create their HTML in the templates.
+    	These data maybe added to existing Variables, like the Node-Object,
+    	or they maybe delivered as singel Variables.
+ 
+ 	2. 	To provide functions, which deliver additional Data, 
+    	which allows Themers to create their HTML in the templates.
+ 
+ 	3. 	Get rid of some Theming-Nonsens, like system.css.
+
+
+	Structure of this file:
+	
+	§1. Building parts of the $thememe Variable
+	§2. Helper-Funcions
+	§3. Template-Tags
+	§4. Hooks
+	Tip: You can jump to the parts by searching for $x 
+
+  	How to use this Module.
+  	There are several ways to use this module.
+
+	1. 	The $thememe Variable
+	
+		This module adds several Information, which are usually not accessible 
+		from within a certain template into an variable named $thememe.
+		Currently you have to make it available in you template by using
+		global $thememe;
+		
+		But I am going to push it via the preprocessing function into the templates, hopefully.
+		If you want to know whats inside $thememe use this line:
+		print "<pre>"; print_r($thememe); print "</pre>";
+		or, if you have the devel module up and running
+		krumo($thememe); 
+	
+	2. The Functions
+	
+		As Drupal is not objectoriented, all functions of all modules are available at
+		almost any line of code. You are highly encouraged by me to use all functions
+		of §3 as Template tags. 
+
+
+ @history
+ 20091018[ben_]: Created the file and moved some functions from my themes over here. 
+ 20091019[ben_]: Added preprocess hook and made all preprocessed variables in $thememe available
+ 20120325[ben_]: Ported the Module to Drupal 7 by starting from scratch again, in beste Drupal-Tradition
+
+
+ The complicated beauty of a river run dry!
+
+ To known more about the giant Great Dane, visit:
+ https://en.wikipedia.org/wiki/Great_Dane
+
+*/
+
+function great_dane_init(){
+	global $thememe;
+
+	$thememe = array();
+	// Put the path within $thememe
+	$thememe["q"] = $_GET["q"];
+	
+		
+	// Are we on a Single-Node-Page or not?
+	if(arg(0)=="node" and is_numeric(arg(1)) and arg(2)==""){
+		$thememe["page"] = true;
+	}else{
+		$thememe["page"] = false;
+	}
+		
+}
+
+function great_dane_get_block($module, $blockid){
+	if(function_exists($module."_block_view")){
+		$block = call_user_func($module."_block_view", $blockid);		
+		return $block;
+	}else{
+		return $array;
+	}
+	
+}
+
+function great_dane_get_field($node, $field){
+	
+}
+
+function great_dane_get_pagetype(){
+	// Homepage goes first
+	if(arg(0)=='node' and arg(1)==''){return "page-homepage";}
+	
+	// Node
+	if(arg(0)=='node' and arg(2)==''){return "page-node";}			
+	
+	// Node-Creation Form
+	if(great_dane_is_nodecreationform()){return "page-nodecreation";}
+	
+	// Single Term
+	if(arg(0)=='taxonomy' and arg(1)=='term' and arg(2)!='' and arg(3)==''){return "page-term";}
+	
+	// Archive
+	if(arg(0)=='archive'){return "page-archive";}
+	
+	// Backend
+	if(arg(0)=='admin'){return "page-admin";}	
+}
+
+
+
+/**
+* This function helps to determine, wether we are in a Node-Creation/Edit-Form
+*/
+function great_dane_is_nodecreationform(){
+	if((arg(0)=='node' and arg(1)=='add') or (arg(0)=='node' and arg(2)=='edit')){
+		return true;
+	}else{
+		return false;
+	}
+}
+
+/**
+* Create lots of CSS-Classes to be added to the Body-Element or another High-Level Element
+*
+* @see thememe_get_nodeclasses()
+*/
+function great_dane_get_pageclasses(){
+	// creating the classes for the body
+	
+	// 1. Get the Type of Page we are on.
+	$classes[] = great_dane_get_pagetype();
+	
+	// 2. Determine wether we are in the Backend
+	if(arg(0)=="admin"){$classes[]="admin";}
+	
+	// Determine wether we are in the Node-Creation-Form
+	if(great_dane_is_nodecreationform()){$classes[]='nodecreationform';}
+
+	// 3. Add Information on the number and Type of Sidebars
+	$sidebarcounter = 0;
+	if($left){
+		$classes[] = "sidebar-left";
+		$sidebarcounter ++;
+	}
+	if($right){
+		$classes[] = "sidebar-right";
+		$sidebarcounter ++;
+	}
+	$classes[] = "sidebars-".$sidebarcounter;
+	
+	// 4. Deliver the main Args
+	if(arg(0)!=""){$classes[] = "arg0-".arg(0);}
+	if(arg(1)!=""){$classes[] = "arg1-".arg(1);}
+	if(arg(2)!=""){$classes[] = "arg2-".arg(2);}
+	if(arg(0)!="" and arg(1)!=""){$classes[] = "arg01-".arg(0)."-".arg(1);}
+	
+	// Here we go!
+	return $classes;
+}
+
+
+/**
+* Create lots of CSS-Classes to be added to the main Element of Nodes
+*
+* @see thememe_get_pageclasses()
+*/
+function great_dane_get_nodeclasses($node, $page, $teaser){
+
+	// It's a node
+	$classes[] = "node";
+	
+	// It's a node of some Nodetype
+	$classes[] = $node->type;
+	
+	//Maybe it's sticky
+	if ($node->sticky=="1") {$classes[] = "sticky";} 
+	
+	// Maybe it's unpublished	
+	if ($node->status=="0") {$classes[] = "unpublished"; }
+	elseif ($node->status=="1") {$classes[] = "published";}
+	
+	// Maybe it's a full view or a teaser	
+	if ($page){$myview = "full";}
+	if ($teaser){$myview = "teaser";}
+	$classes[] = $myview;
+	
+	// Node-View-Combination
+	$classes[] = $node->type."-".$myview;
+	
+	// Maybe it has a teaserimage
+	if($node->field_teaserimage[0]["value"] != ''){$classes[] = "with-teaserimage";}
+	
+	// Get the age of the article counted in years
+	$datediff = date("Ymd")-date("Ymd", $node->created);
+	$age = substr($datediff, 0, strlen($datediff)-4);
+	if($age==""){$age = 0;}
+	$classes[] = "age-".$age;
+	
+	// Rockenroll!
+	return $classes;	
+}
+
+
+function great_dane_get_german_month($month){
+	
+	if($month<10){
+		$month = "0".$month;
+	}
+	
+	$months = array();
+	$months["01"] = "Januar";
+	$months["02"] = "Februar";
+	$months["03"] = "März";
+	$months["04"] = "April";
+	$months["05"] = "Mai";
+	$months["06"] = "Juni";
+	$months["07"] = "Juli";
+	$months["08"] = "August";
+	$months["09"] = "September";
+	$months["10"] = "Oktober";
+	$months["11"] = "November";
+	$months["12"] = "Dezember";
+	
+	return $months[$month];
+}
+
+
+/**
+ * Returns the field items or item values in the language they currently would be displayed.
+ *
+ * @param $entity_type
+ *   The type of $entity; e.g., 'node' or 'user'.
+ * @param $entity
+ *   The entity containing the data to be displayed.
+ * @param $field_name
+ *   The field to be displayed.
+ * @param $item_id
+ *   The item id (delta) to be displayed.
+ * @param $item_value
+ *   The item value to be displayed.
+ * @param $langcode
+ *   (optional) The language code $entity->{$field_name} has to be displayed in.
+ *   Defaults to the current language.
+ *
+ * @return
+ *   An array of field items keyed by delta if available, FALSE otherwise
+ *   or (if passed) a field item if available, FALSE otherwise
+ *   or (if passed) a field item value if available, FALSE otherwise
+ */
+function great_dane_get_field_values($entity_type, $entity, $field_name, $item_id = FALSE, $item_value = FALSE, $langcode = NULL) {
+  // Shortcuts 'n' for nodes and 't' for terms may be used.
+  if ($entity_type === 'n') {
+    $entity_type = 'node';
+  }
+  if ($entity_type === 't') {
+    $entity_type = 'taxonomy_term';
+  }
+  // Use Drupal core function field_get_items() or use the array directly.
+  $field = field_get_items($entity_type, $entity, $field_name, $langcode);
+
+  // Fallback in case the language code has magically disappeared.
+  if (!$field && isset($entity->{$field_name}[0])) {
+    $field = $entity->{$field_name};
+  }
+
+  // Use helper function.
+  return great_dane_clean_field_values($field, $item_id, $item_value);
+
+}
+
+
+/**
+ * Returns the value of the field item in a field collection
+ *
+ * @param $field_name
+ *   The field to be displayed.
+ * @param $item_id
+ *   The item id (delta) to be displayed.
+ * @param $langcode
+ *   ### IS NOT YET IMPLEMENTED ### 
+ *   (optional) The language code $entity->{$field_name} has to be displayed in. 
+ *
+ * @return
+ *   Field item value, FALSE otherwise
+ */
+function great_dane_get_fieldcollection_field_values($field_name, $item_id = FALSE) {
+  
+  // load complete field_collection_item
+  $entityload = entity_load('field_collection_item', array($item_id));
+  
+  // return specific field_collection_item -> field_name
+  if(count($entityload[$item_id]->{$field_name})>0) {
+    return $entityload[$item_id]->{$field_name}[LANGUAGE_NONE][0]['value'];
+  } else {
+    return FALSE;
+  }
+  
+}
+
+
+/**
+ * Returns the field items or item values in the language they currently would be displayed.
+ *
+ * @param $entity_type
+ *   The type of $entity; e.g., 'node' or 'user'.
+ * @param $entity
+ *   The entity containing the data to be displayed.
+ * @param $fieldcollection_name
+ *   The name of the field collection.
+ * @param $item_id
+ *   The item id (delta) to be displayed.
+ *
+ * @return
+ *   Array with item-ids of the field-collection
+ */
+function great_dane_get_fieldcollection_itemids($entity_type, $entity, $fieldcollection_name, $item_id = FALSE, $item_value = FALSE) {
+  $array1 = array();
+  $array2 = great_dane_get_field_values($entity_type, $entity, $fieldcollection_name, $item_id = FALSE, $item_value = FALSE, $langcode = NULL);
+  if(is_array($array2)) {
+    foreach($array2 as $key=>$value) {
+      $array1[] = $value["value"];
+    }
+  }
+  return $array1;
+}
+
+
+/**
+ * Returns the field items or item values in the language they currently would be displayed.
+ *
+ * @param $entity_type
+ *   The type of $entity; e.g., 'node' or 'user'.
+ * @param $entity
+ *   The entity containing the data to be displayed.
+ * @param $field_name
+ *   The field to be displayed.
+ * @param $item_id
+ *   The item id (delta) to be displayed.
+ * @param $item_value
+ *   The item value to be displayed.
+ * @param $langcode
+ *   (optional) The language code $entity->{$field_name} has to be displayed in.
+ *   Defaults to the current language.
+ *
+ * @return
+ *   An array of field items keyed by delta if available, FALSE otherwise
+ *   or (if passed) a field item if available, FALSE otherwise
+ *   or (if passed) a field item value if available, FALSE otherwise
+ */
+function great_dane_clean_field_values($field, $item_id = FALSE, $item_value = FALSE) {
+  // Field does not exist or no item ID is passed.
+  if ($field === FALSE || $item_id === FALSE) {
+    return $field;
+  }
+  // Passed item ID does not exist.
+  if (!isset($field[$item_id])) {
+    return FALSE;
+  }
+  // No item value is passed.
+  if (!$item_value) {
+    return $field[$item_id];
+  }
+  // Passed item value does not exist.
+  if (!isset($field[$item_id][$item_value])) {
+    return FALSE;
+  }
+  // Passed item ID and item value exist.
+  return $field[$item_id][$item_value];
+}
+
+
+function great_dane_get_keys($var){
+	$array = array();
+	if(is_array($var) or is_object($var)){
+		foreach($var as $key => $value){
+		
+		}	
+	}
+}
+
+function great_dane_get_var($var){
+	return great_dane_var_get($var);
+}
+
+function great_dane_var_get($var){
+	ob_start();
+	print_r($var);
+	$string = ob_get_contents();
+	ob_end_clean();
+	return $string;
+}
+
+function great_dane_utf8_substr($str,$start)
+{
+   preg_match_all("/./u", $str, $ar);
+
+   if(func_num_args() >= 3) {
+       $end = func_get_arg(2);
+       return join("",array_slice($ar[0],$start,$end));
+   } else {
+       return join("",array_slice($ar[0],$start));
+   }
+}
+
+function great_dane_string_to_sortkey($string){
+
+ $charTable=array(
+    'A' => 2,
+  	'a' => 2,
+  	'Ä' => 2,
+  	'ä' => 2,
+  	'Á' => 2,
+  	'á' => 2,
+  	'À' => 2,
+  	'à' => 2,
+  	'Â' => 2,
+  	'â' => 2,  	
+  	'Å' => 2,
+  	'å' => 2,
+  	'à' => 2,
+		'Ã' => 2,
+		'ã' => 2,
+		'Æ' => 2,
+		'æ' => 2,
+		'A' => 2,
+		'a' => 2,
+  	'B' => 3,
+  	'b' => 3,
+  	'C' => 4,
+  	'c' => 4,
+  	'Č' => 4,
+  	'ç' => 4,
+		'Ç' => 4,
+		'ç' => 4,
+		'C' => 4,
+		'c' => 4,
+		'c' => 4,
+  	'D' => 5,
+  	'd' => 5,
+		'D' => 5,
+		'd' => 5,
+  	'E' => 6,
+  	'e' => 6,
+  	'É' => 6,
+  	'é' => 6,
+  	'È' => 6,
+  	'è' => 6,
+  	'Ê' => 6,
+  	'ê' => 6,
+  	'F' => 7,
+  	'f' => 7,
+  	'G' => 8,
+  	'g' => 8,
+  	'H' => 9,
+  	'h' => 9,
+  	'I' => 10,
+  	'i' => 10,
+  	'ï' => 10,
+  	'Í' => 10,
+  	'í' => 10,
+  	'Î' => 10,
+  	'î' => 10,
+  	'J' => 11,
+  	'j' => 11,
+  	'K' => 12,
+  	'k' => 12,
+  	'L' => 13,
+  	'l' => 13,
+  	'Ł' => 13,
+  	'ł' => 13,
+  	'M' => 14,
+  	'm' => 14,
+  	'N' => 15,
+  	'n' => 15,
+		'Ñ' => 15,
+		'ñ' => 15,
+  	'O' => 16,
+  	'o' => 16,
+  	'Ö' => 16,
+  	'Ó' => 16,
+  	'ó' => 16,
+  	'Ò' => 16,
+  	'ò' => 16,
+  	'ö' => 16,
+  	'Ô' => 16,
+  	'ô' => 16,
+  	'Ø' => 16,
+  	'ø' => 16,
+		'Œ' => 16,
+		'œ' => 16,
+  	'P' => 17,
+  	'p' => 17,
+  	'Q' => 18,
+  	'q' => 18,
+  	'R' => 19,
+  	'r' => 19,
+  	'S' => 20,
+  	's' => 20,
+  	'Ś' => 20,
+  	'ś' => 20,
+  	'ß' => 20,
+  	'T' => 21,
+  	't' => 21,
+  	'U' => 22,
+  	'u' => 22,
+  	'Ü' => 22,
+  	'ü' => 22,
+  	'Ú' => 22,
+  	'ú' => 22,
+  	'Ů' => 22,
+  	'ů' => 22,
+  	'Ù' => 22,
+  	'ù' => 22,
+  	'Û' => 22,
+  	'û' => 22,
+  	'V' => 23,
+  	'v' => 23,
+  	'W' => 24,
+  	'w' => 24,
+  	'X' => 25,
+  	'x' => 25,
+  	'Y' => 26,
+  	'y' => 26,
+  	'Ý' => 26,
+  	'ý' => 26,
+  	'Z' => 27,
+  	'z' => 27,
+  	'Ž' => 27,
+  	'ž' => 27
+  );
+
+  $string=(string)$string;  
+
+  $sort=0;
+  $multiply=1000000;
+  for($i=0;$i<4;$i++)
+  {
+	  $current = 0;
+	  if(strlen($string)<=$i)
+	  {
+  	  //$title ist zu ende
+	  }
+	  else
+	  {
+	    $char = great_dane_utf8_substr($string, $i, 1);	    
+  	  if(array_key_exists($char,$charTable))
+  	  {
+  	    $current=$charTable[$char];
+  	  }
+  	  else
+  	  { 
+	  	  $current = 1;
+  	  }
+	  }
+	  $current=$current*($multiply);
+	  $multiply=$multiply/100;
+	  $sort=$sort+$current;
+  }
+  return $sort;
+
+}
+
